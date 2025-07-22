@@ -1,3 +1,6 @@
+#define _GNU_SOURCE
+#include <sched.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -5,6 +8,7 @@
 #include "../xmss.h"
 #include "../params.h"
 #include "../randombytes.h"
+#include "armv8_tsc.h"
 
 #define XMSS_MLEN 32
 
@@ -34,13 +38,13 @@
     #endif
 #endif
 
-static unsigned long long cpucycles(void)
-{
-  unsigned long long result;
-  __asm volatile(".byte 15;.byte 49;shlq $32,%%rdx;orq %%rdx,%%rax"
-    : "=a" (result) ::  "%rdx");
-  return result;
-}
+//static unsigned long long cpucycles(void)
+//{
+//  unsigned long long result;
+//  __asm volatile(".byte 15;.byte 49;shlq $32,%%rdx;orq %%rdx,%%rax"
+//    : "=a" (result) ::  "%rdx");
+//  return result;
+//}
 
 static int cmp_llu(const void *a, const void*b)
 {
@@ -107,7 +111,8 @@ int main()
     unsigned long long smlen;
     unsigned long long mlen;
 
-    unsigned long long t0, t1;
+    //unsigned long long t0, t1;
+    uint64_t t0, t1;
     unsigned long long *t = malloc(sizeof(unsigned long long) * XMSS_SIGNATURES);
     struct timespec start, stop;
     double result;
@@ -119,17 +124,24 @@ int main()
     printf("Generating keypair.. ");
 
     clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start);
-    t0 = cpucycles();
-    XMSS_KEYPAIR(pk, sk, oid);
-    t1 = cpucycles();
+    //t0 = cpucycles();
+    //printf("get time ran");
+    if(armv8_tsc_init())
+    {
+      //printf("if case entered");
+      t0 = armv8_pmccntr();
+      XMSS_KEYPAIR(pk, sk, oid);
+      //t1 = cpucycles();
+      t1 = armv8_pmccntr();
+      armv8_tsc_done();
+    }
     clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &stop);
     result = (stop.tv_sec - start.tv_sec) * 1e6 + (stop.tv_nsec - start.tv_nsec) / 1e3;
-    printf("took %lf us (%.2lf sec), %llu cycles\n", result, result / 1e6, t1 - t0);
-
+    printf("took %lf us (%.2lf sec), %zu cycles\n", result, result / 1e6, (size_t)(t1 - t0));
     printf("Creating %d signatures..\n", XMSS_SIGNATURES);
 
     for (i = 0; i < XMSS_SIGNATURES; i++) {
-        t[i] = cpucycles();
+        if(armv8_tsc_init()){t[i] = (unsigned long long) armv8_pmccntr();armv8_tsc_done();}
         XMSS_SIGN(sk, sm, &smlen, m, XMSS_MLEN);
     }
     print_results(t, XMSS_SIGNATURES);
@@ -137,7 +149,7 @@ int main()
     printf("Verifying %d signatures..\n", XMSS_SIGNATURES);
 
     for (i = 0; i < XMSS_SIGNATURES; i++) {
-        t[i] = cpucycles();
+        if(armv8_tsc_init()){t[i] = (unsigned long long) armv8_pmccntr();armv8_tsc_done();}
         ret |= XMSS_SIGN_OPEN(mout, &mlen, sm, smlen, pk);
     }
     print_results(t, XMSS_SIGNATURES);
