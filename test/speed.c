@@ -114,6 +114,7 @@ int main()
     //unsigned long long t0, t1;
     uint64_t t0, t1;
     unsigned long long *t = malloc(sizeof(unsigned long long) * XMSS_SIGNATURES);
+    //memset(t, 0, sizeof(unsigned long long)*XMSS_SIGNATURES);
     struct timespec start, stop;
     double result;
 
